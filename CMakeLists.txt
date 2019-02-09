@@ -70,21 +70,6 @@ set(LIB_SRC
 
 # dependencies
 
-option(WITH_JOURNALD "Check journald." ON)
-
-if (WITH_JOURNALD)
-  include(FindSystemd)
-  find_package(Systemd REQUIRED)
-  if (SYSTEMD_FOUND)
-      set(SYSTEMD_LIBRARIES systemd)
-      include_directories(${SYSTEMD_INCLUDE_DIRS})
-      set(DISABLE_JOURNALD OFF)
-  endif ()
-else()
-  add_definitions(-DY_DISABLE_JOURNALD)
-  set(DISABLE_JOURNALD ON)
-endif ()
-
 # shared library
 
 add_library(yder SHARED ${LIB_SRC})
@@ -97,7 +82,8 @@ if (WIN32)
     set_target_properties(yder PROPERTIES SUFFIX "-${LIBRARY_VERSION_MAJOR}.dll")
 endif ()
 
-target_link_libraries(yder ${LIBS} ${ORCANIA_LIBRARIES} ${SYSTEMD_LIBRARIES})
+target_link_libraries(yder ${ORCANIA_LIB_DIR} ${JANSSON_LIB_DIR} ${LIBS} ${SYSTEMD_LIBRARIES})
+target_include_directories(yder PUBLIC ${JANSSON_INC_DIR} ${ORCANIA_INC_DIR})
 
 # static library
 
@@ -110,37 +96,6 @@ if (BUILD_STATIC)
             OUTPUT_NAME yder)
 endif ()
 
-option (SEARCH_ORCANIA "Search for Orcania library" ON)
-if (SEARCH_ORCANIA)
-    set(Orcania_FIND_QUIETLY ON) # force to find Orcania quietly
-    include(FindOrcania)
-    find_package(Orcania 1.1 QUIET) # try to find orcania
-    if (NOT ORCANIA_FOUND)
-        include(DownloadProject)
-        download_project(PROJ orcania # ... otherwise, download archive
-            URL "https://github.com/babelouest/orcania/archive/v${ORCANIA_VERSION_DOWNLOAD}.tar.gz"
-            QUIET)
-        add_subdirectory(${orcania_SOURCE_DIR} ${orcania_BINARY_DIR})
-        include_directories(${orcania_SOURCE_DIR}/include)
-        include_directories(${orcania_BINARY_DIR})
-        add_dependencies(yder orcania)
-        set(ORCANIA_LIBRARIES orcania)
-        set(LIBS ${LIBS} ${ORCANIA_LIBRARIES})
-    else()
-        set(LIBS ${LIBS} ${ORCANIA_LIBRARIES})
-        include_directories(${ORCANIA_INCLUDE_DIRS})
-        include_directories(${orcania_BINARY_DIR})
-    endif ()
-endif ()
-
-if (WITH_JOURNALD)
-  set(PKGCONF_REQ "")
-  set(PKGCONF_REQ_PRIVATE "libsystemd, liborcania")
-else ()
-  set(PKGCONF_REQ "")
-  set(PKGCONF_REQ_PRIVATE "liborcania")
-endif ()
-
 # build yder-cfg.h file
 configure_file(${INC_DIR}/yder-cfg.h.in ${PROJECT_BINARY_DIR}/yder-cfg.h)
 set (CMAKE_EXTRA_INCLUDE_FILES ${PROJECT_BINARY_DIR})
@@ -149,44 +104,6 @@ include_directories(${PROJECT_BINARY_DIR})
 # tests
 
 option(BUILD_YDER_TESTING "Build the testing tree." OFF) # because we don not use include(CTest)
-
-if (BUILD_YDER_TESTING)
-    include(FindCheck)
-    find_package(Check)
-    if (CHECK_FOUND)
-        if (NOT WIN32)
-            include(FindSubunit)
-            find_package(Subunit REQUIRED)
-        endif ()
-
-        enable_testing()
-
-        set(CMAKE_CTEST_COMMAND ctest -V)
-
-        set(TST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
-        set(LIBS yder ${LIBS} ${CHECK_LIBRARIES})
-        if (NOT WIN32)
-            find_package(Threads REQUIRED)
-            set(LIBS ${LIBS} ${SUBUNIT_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT} m rt)
-        endif ()
-
-        set(TESTS yder_test)
-
-        configure_file(
-                "${CMAKE_MODULE_PATH}/CTestCustom.cmake.in"
-                "${CMAKE_CURRENT_BINARY_DIR}/CTestCustom.cmake"
-                @ONLY)
-
-        foreach (t ${TESTS})
-            add_executable(${t} EXCLUDE_FROM_ALL ${TST_DIR}/${t}.c)
-            target_include_directories(${t} PUBLIC ${TST_DIR})
-            target_link_libraries(${t} PUBLIC ${LIBS})
-            add_test(NAME ${t}
-                    WORKING_DIRECTORY ${TST_DIR}
-                    COMMAND ${t})
-        endforeach ()
-    endif ()
-endif ()
 
 # install target
 
@@ -276,7 +193,6 @@ include(CPack)
 add_custom_target(dist_y
         COMMAND ${CMAKE_MAKE_PROGRAM} package_source)
 
-message(STATUS "Journald support: ${WITH_JOURNALD}")
 message(STATUS "Build static library: ${BUILD_STATIC}")
 message(STATUS "Build testing tree: ${BUILD_ULFIUS_TESTING}")
 message(STATUS "Install the header files: ${INSTALL_HEADER}")
